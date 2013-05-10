@@ -23,141 +23,169 @@ button {
 
 <script type='text/javascript'>
 
-var indent = 0;
+var indentLog = (function () {
 
-var timeRegex          = /\d\d:\d\d:\d\d\.\d\d\d/i;
-var microsecondsRegex  = /\(\d\d*\)/i;
-var categoryRegex      = /\|[^|]*/i;
-var subcategoryRegex   = /\|\[\w*\]/i;
-var objectIdRegex      = /\|[A-Z0-9]{15}\|/i;
+    var indent = 0;
 
-function indentLog() {
+    var timeRegex          = /\d\d:\d\d:\d\d\.\d\d\d/i;
+    var microsecondsRegex  = /\(\d\d*\)/i;
+    var categoryRegex      = /\|[^|]*/i;
+    var subcategoryRegex   = /\|\[\w*\]/i;
+    var objectIdRegex      = /\|[A-Z0-9]{15}\|/i;
 
-	var input = document.getElementById('input').value;
-	var lines = input.split('\n');
-	var output = '';
-	var numOk = 0;
+    function indentLog() {
 
-	var includeTime         = document.getElementById('includeTime').checked;
-	var includeMicroseconds = document.getElementById('includeMicroseconds').checked;
-	var includeCategory     = document.getElementById('includeCategory').checked;
-	var includeSubcategory  = document.getElementById('includeSubcategory').checked;
-	var includeObjectId     = document.getElementById('includeObjectId').checked;
+        var input = document.getElementById('input').value;
+        var lines = input.split('\n');
+        var outputTableEl = document.getElementById('output');
+        var numOk = 0;
 
-	indent = 0;
-	
-	for (var i = 0; i < lines.length; i++) {
-	
-		var line = lines[i];
+        var includeTime         = document.getElementById('includeTime').checked;
+        var includeMicroseconds = document.getElementById('includeMicroseconds').checked;
+        var includeCategory     = document.getElementById('includeCategory').checked;
+        var includeSubcategory  = document.getElementById('includeSubcategory').checked;
+        var includeObjectId     = document.getElementById('includeObjectId').checked;
 
-		if (timeRegex.test(line)) {
-			output += indentLine(line, includeTime, includeMicroseconds, includeCategory, includeSubcategory, includeObjectId);
-			++numOk;
-		}
-		
-	}
-	
-	document.getElementById('output').innerHTML = output;
-	
-	if (indent !== 0)
-	{
-		alert('Error - indent not zero at end: ' + indent);
-	}
-	
-	if (input && input.length > 0 && numOk === 0)
-	{
-		alert("Error - didn't understand the input.\n\nPaste a Salesforce Debug Log into the text-area.\n\nYou can paste a full Ctrl-A Ctrl-C copy of the whole Debug Log screen from your browser or from eclipse.");
-	}
-}
+        indent = 0;
 
-function indentLine(line, includeTime, includeMicroseconds, includeCategory, includeSubcategory, includeObjectId) {
-	
-	var output = '';
+        outputTableEl.innerHTML = ''; // Clear
+        for (var i = 0; i < lines.length; i++) {
 
-	var timeArray = timeRegex.exec(line);
-	var microsecondsArray = microsecondsRegex.exec(line);
-	var categoryArray = categoryRegex.exec(line);
-	var subcategoryArray = subcategoryRegex.exec(line);
-	var objectIdArray = objectIdRegex.exec(line);
-	
-	output += format(includeTime, timeArray);
-	output += format(includeMicroseconds, microsecondsArray);
-	output += format(includeObjectId, objectIdArray);
-	output += format(includeSubcategory, subcategoryArray);
-	output += format(includeCategory, categoryArray);
-	
-	line = line.replace(timeRegex, '');
-	line = line.replace(microsecondsRegex, '');	
-	line = line.replace(categoryRegex, '');
-	line = line.replace(subcategoryRegex, '');	
-	line = line.replace(objectIdRegex, '');
+            var line = lines[i];
 
-	var isEntry  = false;
-	var isExit   = false;
-	var rowStyle = '';
-	
-	if (categoryArray) {
-		
-		var category = categoryArray[0];
-		
-		if (/_ENTRY|_ENTER|DML_BEGIN|SOQL_EXECUTE_BEGIN/.test(category)) {
-			isEntry = true;
-		}		
-		else if (/_EXIT|DML_END|SOQL_EXECUTE_END/.test(category)) {
-			isExit = true;
-		}
-		else if (/EXCEPTION_THROWN|FATAL_ERROR/.test(category)) {
-			rowStyle = 'background-color: #fdd;';
-		}
-		else if (/USER_DEBUG/.test(category)) {
-			rowStyle = 'background-color: #dfd;';
-		}		
-	}
+            if (timeRegex.test(line)) {
+                outputTableEl.appendChild(indentLine(line, includeTime, includeMicroseconds, includeCategory, includeSubcategory, includeObjectId));
+                ++numOk;
+            }
 
-	if (isExit) {
-		indent--;
-	}
+        }
 
-	var paddingLeft = indent * 30; 
-	
-	if (indent < 0) {
-		line += " NEGATIVE INDENT ";
-	}
-	
-	output += '<td style="padding-left:' + paddingLeft + 'px;">' + cleanUp(line) + '</td>';
-	
-	if (isEntry) {
-		indent++;
-	}		
-	
-	return '<tr style="' + rowStyle + '">' + output + '</tr>';
-}
+        if (indent !== 0)
+        {
+            alert('Error - indent not zero at end: ' + indent);
+        }
 
-function format(include, resultsArray) {
+        if (input && input.length > 0 && numOk === 0)
+        {
+            alert("Error - didn't understand the input.\n\nPaste a Salesforce Debug Log into the text-area.\n\nYou can paste a full Ctrl-A Ctrl-C copy of the whole Debug Log screen from your browser or from eclipse.");
+        }
+    }
 
-	if (include) {
-		
-		if (resultsArray && resultsArray[0]) {
-			var text = cleanUp(resultsArray[0]);
-			return '<td>' + text + '</td>';
-		}
-		else {
-			return '<td>&nbsp;</td>';
-		}
-		
-	}
+    /**
+     * Create a table row for the given line
+     * @param {String} line the input line
+     * @param {Boolean} includeTime
+     * @param {Boolean} includeMicroseconds
+     * @param {Boolean} includeCategory
+     * @param {Boolean} includeSubcategory
+     * @param {Boolean} includeObjectId
+     * @returns {HTMLTableRowElement} the created table row.
+     */
+    function indentLine(line, includeTime, includeMicroseconds, includeCategory, includeSubcategory, includeObjectId) {
 
-	return '';	
-}
+        var tr = document.createElement('tr');
 
-function cleanUp(text) {
+        var timeArray = timeRegex.exec(line);
+        var microsecondsArray = microsecondsRegex.exec(line);
+        var categoryArray = categoryRegex.exec(line);
+        var subcategoryArray = subcategoryRegex.exec(line);
+        var objectIdArray = objectIdRegex.exec(line);
 
-	if (text === null || text === undefined) {
-	    return '';
-	}
+        if (includeTime) tr.appendChild(format(timeArray));
+        if (includeMicroseconds) tr.appendChild(format(microsecondsArray));
+        if (includeObjectId) tr.appendChild(format(objectIdArray));
+        if (includeSubcategory) tr.appendChild(format(subcategoryArray));
+        if (includeCategory) tr.appendChild(format(categoryArray));
 
-	return text.replace(/\|/, '').replace(/\|$/, '');
-}
+        line = line.replace(timeRegex, '');
+        line = line.replace(microsecondsRegex, '');
+        line = line.replace(categoryRegex, '');
+        line = line.replace(subcategoryRegex, '');
+        line = line.replace(objectIdRegex, '');
+
+        var isEntry  = false;
+        var isExit   = false;
+
+        if (categoryArray) {
+
+            var category = categoryArray[0];
+
+            if (/_ENTRY|_ENTER|DML_BEGIN|SOQL_EXECUTE_BEGIN/.test(category)) {
+                isEntry = true;
+            }
+            else if (/_EXIT|DML_END|SOQL_EXECUTE_END/.test(category)) {
+                isExit = true;
+            }
+            else if (/EXCEPTION_THROWN|FATAL_ERROR/.test(category)) {
+                tr.style.backgroundColor = '#fdd';
+            }
+            else if (/USER_DEBUG/.test(category)) {
+                tr.style.backgroundColor = '#dfd';
+            }
+        }
+
+        if (isExit) {
+            indent--;
+        }
+
+        var paddingLeft = indent * 30;
+
+        if (indent < 0) {
+            line += " NEGATIVE INDENT ";
+        }
+
+        tr.appendChild(formatLog(paddingLeft, cleanUp(line)));
+        output += '<td style="padding-left:' + paddingLeft + 'px;">' + cleanUp(line) + '</td>';
+
+        if (isEntry) {
+            indent++;
+        }
+
+        return tr;
+    }
+
+    /**
+     * Create a TD with the given padding and text content.
+     * @param paddingLeft
+     * @param text
+     * @returns {HTMLElement}
+     */
+    function formatLog(paddingLeft, text){
+        var td = document.createElement('td');
+        td.style.paddingLeft = paddingLeft + 'px';
+        td.appendChild(document.createTextNode(text));
+        return td;
+    }
+
+    /**
+     * Create a TD for the given REGEX results array.
+     * @param resultsArray
+     * @returns {HTMLTableCellElement}
+     */
+    function format(resultsArray) {
+        var td = document.createElement('td');
+        if (resultsArray && resultsArray[0]) {
+            var text = cleanUp(resultsArray[0]);
+            td.appendChild(document.createTextNode(text));
+        }
+        else {
+            td.innerHTML = '&nbsp;';
+        }
+        return td;
+    }
+
+    function cleanUp(text) {
+
+        if (text === null || text === undefined) {
+            return '';
+        }
+
+        return text.replace(/\|/, '').replace(/\|$/, '');
+    }
+
+    return indentLog;
+}());
+
 
 </script>
 
