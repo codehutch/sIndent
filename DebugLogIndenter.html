@@ -132,7 +132,6 @@ function indentLine(line, includeTime, includeMicroseconds, includeCategory, inc
 	}
 
 	tr.appendChild(formatLog(paddingLeft, cleanUp(line)));
-	output += '<td style="padding-left:' + paddingLeft + 'px;">' + cleanUp(line) + '</td>';
 
 	if (isEntry) {
 		indent++;
@@ -192,17 +191,18 @@ sIndent - Salesforce Debug Log Indenter - <span style='color:#ccc'> Andy Hutchin
 
 </div>
 
-<textarea id='input' autofocus required cols='100' rows='6' wrap='hard' oninput='indentLog()'
+<textarea id='input' autofocus required cols='100' rows='5' wrap='hard' oninput='indentLog()'
  placeholder='Paste your log here... (You can paste the full contents of the salesforce debug log screen from your browser or from eclipse - i.e. Ctrl-A Ctrl-C then Paste)'></textarea>
 
 <div>
-  <button onclick='indentLog()'>Indent</button>
-  Include:
-  <input id='includeTime' type='checkbox' onclick='indentLog()' checked>time</input>
-  <input id='includeMicroseconds' type='checkbox' onclick='indentLog()'>microseconds</input>
-  <input id='includeObjectId' type='checkbox' onclick='indentLog()'>objectId</input>
-  <input id='includeSubcategory' type='checkbox' onclick='indentLog()'>subcategory</input>
-  <input id='includeCategory' type='checkbox' onclick='indentLog()' checked>category</input>
+  <fieldset>
+    <legend>Include</legend>
+    <input id='includeTime' type='checkbox' onclick='indentLog()' checked>time</input>
+    <input id='includeMicroseconds' type='checkbox' onclick='indentLog()'>microseconds</input>
+    <input id='includeObjectId' type='checkbox' onclick='indentLog()'>objectId</input>
+    <input id='includeSubcategory' type='checkbox' onclick='indentLog()'>subcategory</input>
+    <input id='includeCategory' type='checkbox' onclick='indentLog()' checked>category</input>
+  </fieldset>
 </div>
 
 <table id='output' style='font-family:monospace'></table>
