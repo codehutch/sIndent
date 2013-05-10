@@ -107,10 +107,10 @@ function indentLine(line, includeTime, includeMicroseconds, includeCategory, inc
 
 		var category = categoryArray[0];
 
-		if (/_ENTRY|_ENTER|DML_BEGIN|SOQL_EXECUTE_BEGIN/.test(category)) {
+		if (/METHOD_ENTRY|CONSTRUCTOR_ENTRY|DML_BEGIN|SOQL_EXECUTE_BEGIN|CODE_UNIT_STARTED|VF_DESERIALIZE_VIEWSTATE_BEGIN/.test(category)) {
 			isEntry = true;
 		}
-		else if (/_EXIT|DML_END|SOQL_EXECUTE_END/.test(category)) {
+		else if (/METHOD_EXIT|CONSTRUCTOR_EXIT|DML_END|SOQL_EXECUTE_END|CODE_UNIT_FINISHED|VF_DESERIALIZE_VIEWSTATE_END/.test(category)) {
 			isExit = true;
 		}
 		else if (/EXCEPTION_THROWN|FATAL_ERROR/.test(category)) {
