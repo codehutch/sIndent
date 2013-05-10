@@ -66,7 +66,7 @@ function indentLog() {
 	
 	if (input && input.length > 0 && numOk === 0)
 	{
-		alert("Error - didn't understand the input.\n\nPaste a Salesforce Debug Log into the text-area.\n\nYou can paste a Ctrl-C copy of the whole Debug Log screen from your browser or from eclipse.");
+		alert("Error - didn't understand the input.\n\nPaste a Salesforce Debug Log into the text-area.\n\nYou can paste a full Ctrl-A Ctrl-C copy of the whole Debug Log screen from your browser or from eclipse.");
 	}
 }
 
@@ -172,7 +172,7 @@ sIndent - Salesforce Debug Log Indenter - <span style='color:#ccc'> Andy Hutchin
 </div>
 
 <textarea id='input' autofocus required cols='100' rows='6' wrap='hard' oninput='indentLog()'
- placeholder='Paste your log here... (You can paste the full contents of the salesforce debug log screen from your browser or from eclipse - i.e. get it with Ctrl-A then Ctrl-C)'></textarea>
+ placeholder='Paste your log here... (You can paste the full contents of the salesforce debug log screen from your browser or from eclipse - i.e. Ctrl-A Ctrl-C then Paste)'></textarea>
 
 <div>
   <button onclick='indentLog()'>Indent</button>
