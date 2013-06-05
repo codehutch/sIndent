@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<title> sIndent - Salesforce Debug Log Indenter </title>
+
+<link rel="stylesheet" href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/themes/cupertino/jquery-ui.css" type="text/css" media="all" />
+
+<style>
+
+h1 {
+	color: rgb(39, 121, 170);
+	font-family: 'Lucida Grande', 'Lucida Sans', Arial, sans-serif;
+	font-size: 18px;
+	font-weight: bold;
+}
+
+#toolbar {
+    padding: 4px;
+}
+
+</style>
+  
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.1/jquery.min.js"></script>
+<script src="http://ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/jquery-ui.min.js"></script>
+
+<script type='text/javascript'>
+
+var indent = 0;
+
+var timeRegex          = /\d\d:\d\d:\d\d\.\d\d\d/i;
+var microsecondsRegex  = /\(\d\d*\)/i;
+var categoryRegex      = /\|[^|]*/i;
+var subcategoryRegex   = /\|\[\w*\]/i;
+var objectIdRegex      = /\|[A-Z0-9]{15}\|/i;
+
+function indentLog() {
+
+	var input = document.getElementById('input').value;
+	var lines = input.split('\n');
+	var outputTableEl = document.getElementById('output');
+	var numOk = 0;
+
+	var includeTime         = document.getElementById('includeTime').checked;
+	var includeMicroseconds = document.getElementById('includeMicroseconds').checked;
+	var includeCategory     = document.getElementById('includeCategory').checked;
+	var includeSubcategory  = document.getElementById('includeSubcategory').checked;
+	var includeObjectId     = document.getElementById('includeObjectId').checked;
+
+	indent = 0;
+
+    outputTableEl.innerHTML = ''; // Clear
+	for (var i = 0; i < lines.length; i++) {
+
+		var line = lines[i];
+
+		if (timeRegex.test(line)) {
+			outputTableEl.appendChild(indentLine(line, includeTime, includeMicroseconds, includeCategory, includeSubcategory, includeObjectId));
+			++numOk;
+		}
+	}
+
+	if (indent !== 0)
+	{
+		alert('Either your log was truncated or something went wrong. (Non-zero indent at end: ' + indent + ')');
+	}
+
+	if (input && input.length > 0 && numOk === 0)
+	{
+		alert("Didn't understand the input.\n\nPaste a Salesforce Debug Log into the text-area.\n\nYou can paste a full Ctrl-A Ctrl-C copy of the whole Debug Log screen from your browser or from eclipse.");
+	}
+}
+
+/**
+ * Create a table row for the given line
+ * @param {String} line the input line
+ * @param {Boolean} includeTime
+ * @param {Boolean} includeMicroseconds
+ * @param {Boolean} includeCategory
+ * @param {Boolean} includeSubcategory
+ * @param {Boolean} includeObjectId
+ * @returns {HTMLTableRowElement} the created table row.
+ */
+function indentLine(line, includeTime, includeMicroseconds, includeCategory, includeSubcategory, includeObjectId) {
+
+	var tr = document.createElement('tr');
+
+	var timeArray = timeRegex.exec(line);
+	var microsecondsArray = microsecondsRegex.exec(line);
+	var categoryArray = categoryRegex.exec(line);
+	var subcategoryArray = subcategoryRegex.exec(line);
+	var objectIdArray = objectIdRegex.exec(line);
+
+	if (includeTime) tr.appendChild(format(timeArray));
+	if (includeMicroseconds) tr.appendChild(format(microsecondsArray));
+	if (includeObjectId) tr.appendChild(format(objectIdArray));
+	if (includeSubcategory) tr.appendChild(format(subcategoryArray));
+	if (includeCategory) tr.appendChild(format(categoryArray));
+
+	line = line.replace(timeRegex, '');
+	line = line.replace(microsecondsRegex, '');
+	line = line.replace(categoryRegex, '');
+	line = line.replace(subcategoryRegex, '');
+	line = line.replace(objectIdRegex, '');
+
+	var isEntry  = false;
+	var isExit   = false;
+
+	if (categoryArray) {
+
+		var category = categoryArray[0];
+
+		if (/METHOD_ENTRY|CONSTRUCTOR_ENTRY|DML_BEGIN|SOQL_EXECUTE_BEGIN|CODE_UNIT_STARTED|VF_DESERIALIZE_VIEWSTATE_BEGIN/.test(category)) {
+			isEntry = true;
+		}
+		else if (/METHOD_EXIT|CONSTRUCTOR_EXIT|DML_END|SOQL_EXECUTE_END|CODE_UNIT_FINISHED|VF_DESERIALIZE_VIEWSTATE_END/.test(category)) {
+			isExit = true;
+		}
+		else if (/EXCEPTION_THROWN|FATAL_ERROR/.test(category)) {
+			tr.style.backgroundColor = '#fdd';
+		}
+		else if (/USER_DEBUG/.test(category)) {
+			tr.style.backgroundColor = '#dfd';
+		}
+	}
+
+	if (isExit) {
+		indent--;
+	}
+
+	var paddingLeft = indent * 30;
+
+	if (indent < 0) {
+		line += " NEGATIVE INDENT ";
+	}
+
+	tr.appendChild(formatLog(paddingLeft, cleanUp(line)));
+
+	if (isEntry) {
+		indent++;
+	}
+
+	return tr;
+	
+}
+
+/**
+ * Create a TD with the given padding and text content.
+ * @param paddingLeft
+ * @param text
+ * @returns {HTMLElement}
+ */
+function formatLog(paddingLeft, text){
+	var td = document.createElement('td');
+	td.style.paddingLeft = paddingLeft + 'px';
+	td.appendChild(document.createTextNode(text));
+	return td;
+}
+
+/**
+ * Create a TD for the given REGEX results array.
+ * @param resultsArray
+ * @returns {HTMLTableCellElement}
+ */
+function format(resultsArray) {
+	var td = document.createElement('td');
+	if (resultsArray && resultsArray[0]) {
+		var text = cleanUp(resultsArray[0]);
+		td.appendChild(document.createTextNode(text));
+	}
+	else {
+		td.innerHTML = '&nbsp;';
+	}
+	return td;
+}
+
+function cleanUp(text) {
+
+	if (text === null || text === undefined) {
+		return '';
+	}
+
+	return text.replace(/\|/, '').replace(/\|$/, '');
+}
+
+$(function() {
+
+	$("#reformatButton")
+	.button()
+    .click(function( event ) {
+        event.preventDefault();
+    });
+	
+	$("#clearButton")
+	.button()
+    .click(function( event ) {
+        event.preventDefault();
+    });
+	
+	$("#demoButton")
+	.button()
+    .click(function( event ) {
+        event.preventDefault();
+    });
+
+    $("#include").buttonset();
+});
+
+</script>
+
+</head>
+
+<body>
+
+<h1>
+
+sIndent - Salesforce Debug Log Indenter
+
+</h1>
+
+<textarea id='input' autofocus required cols='100' rows='5' wrap='hard' oninput='indentLog()'
+ placeholder='Paste your log here... (You can paste the full contents of the salesforce debug log screen from your browser or from eclipse - i.e. Ctrl-A Ctrl-C then Paste)'></textarea>
+
+<div id="toolbar">
+
+	<input id='reformatButton' type='button' value='Indent'/>
+	<input id='clearButton'    type='button' value='Clear'/>
+	<input id='demoButton'     type='button' value='Demo'/>
+
+	<span class='ui-widget'>Show:</span>
+    
+	<span id="include">
+
+		<input id='includeTime'         type='checkbox' onclick='indentLog()' checked /><label for='includeTime'        >time</label>
+		<input id='includeMicroseconds' type='checkbox' onclick='indentLog()'         /><label for='includeMicroseconds'>microseconds</label>
+		<input id='includeObjectId'     type='checkbox' onclick='indentLog()'         /><label for='includeObjectId'    >objectId</label>
+		<input id='includeSubcategory'  type='checkbox' onclick='indentLog()'         /><label for='includeSubcategory' >line/subcat</label>
+		<input id='includeCategory'     type='checkbox' onclick='indentLog()' checked /><label for='includeCategory'    >category</label>
+
+	</span>
+
+</div>
+
+<table id='output' style='font-family:monospace'></table>
+
+</body>
+
+</html>
