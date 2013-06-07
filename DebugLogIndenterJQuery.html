@@ -6,27 +6,64 @@
 
 <title> sIndent - Salesforce Debug Log Indenter </title>
 
-<link rel="stylesheet" href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/themes/cupertino/jquery-ui.css" type="text/css" media="all" />
+<link rel="stylesheet" type="text/css" media="all" href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/themes/cupertino/jquery-ui.css"/>
+<link rel="stylesheet" type="text/css" media="all" href="http://extjs-public.googlecode.com/svn/tags/extjs-4.1.1a/release/resources/css/ext-all.css">
 
 <style>
 
-h1 {
-	color: rgb(39, 121, 170);
-	font-family: 'Lucida Grande', 'Lucida Sans', Arial, sans-serif;
-	font-size: 18px;
-	font-weight: bold;
+textarea {
+	width: 100%;
+	margin-bottom: 5px;
 }
 
-#toolbar {
-    padding: 4px;
+.logCell {
+	padding: 2px;
+	border: 2px solid #fff;
+	background-color: #eee;
+}
+
+.noClose .ui-dialog-titlebar-close {
+	display: none;
+}
+
+.asBlock {
+	display: inline-block;
+}
+
+#log {
+	margin-top: 17em;
+	margin-left: 1em;
+	margin-right: 1em;
 }
 
 </style>
   
 <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.1/jquery.min.js"></script>
 <script src="http://ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/jquery-ui.min.js"></script>
+<script src="http://extjs-public.googlecode.com/svn/tags/extjs-4.1.1a/release/ext-all.js"></script>
 
 <script type='text/javascript'>
+
+Ext.require([
+	'Ext.data.*', 
+	'Ext.grid.*', 
+	'Ext.tree.*'
+]);
+
+var root = {
+	expanded:     true,
+	leaf:         false,
+	children:     [],
+	text:         'TEXT',
+	time:         'TIME',
+	microseconds: 'MICROSECONDS',
+	category:     'CATEGORY',
+	line:         'LINE/SUBCAT',
+	objectId:     'OBJECTID'	
+};
+
+var extTree;
+var nodeStack;
 
 var indent = 0;
 
@@ -36,28 +73,26 @@ var categoryRegex      = /\|[^|]*/i;
 var subcategoryRegex   = /\|\[\w*\]/i;
 var objectIdRegex      = /\|[A-Z0-9]{15}\|/i;
 
-function indentLog() {
+function parse() {
+	
+console.log('parse');	
+
+	delete root.children;
+	root.children = [];
+	nodeStack = [root];
 
 	var input = document.getElementById('input').value;
 	var lines = input.split('\n');
-	var outputTableEl = document.getElementById('output');
 	var numOk = 0;
-
-	var includeTime         = document.getElementById('includeTime').checked;
-	var includeMicroseconds = document.getElementById('includeMicroseconds').checked;
-	var includeCategory     = document.getElementById('includeCategory').checked;
-	var includeSubcategory  = document.getElementById('includeSubcategory').checked;
-	var includeObjectId     = document.getElementById('includeObjectId').checked;
 
 	indent = 0;
 
-    outputTableEl.innerHTML = ''; // Clear
 	for (var i = 0; i < lines.length; i++) {
 
 		var line = lines[i];
 
 		if (timeRegex.test(line)) {
-			outputTableEl.appendChild(indentLine(line, includeTime, includeMicroseconds, includeCategory, includeSubcategory, includeObjectId));
+			parseLine(line);
 			++numOk;
 		}
 	}
@@ -71,34 +106,27 @@ function indentLog() {
 	{
 		alert("Didn't understand the input.\n\nPaste a Salesforce Debug Log into the text-area.\n\nYou can paste a full Ctrl-A Ctrl-C copy of the whole Debug Log screen from your browser or from eclipse.");
 	}
+	
+	savedChildren = root.children;
+	render();
 }
 
 /**
  * Create a table row for the given line
- * @param {String} line the input line
- * @param {Boolean} includeTime
- * @param {Boolean} includeMicroseconds
- * @param {Boolean} includeCategory
- * @param {Boolean} includeSubcategory
- * @param {Boolean} includeObjectId
- * @returns {HTMLTableRowElement} the created table row.
  */
-function indentLine(line, includeTime, includeMicroseconds, includeCategory, includeSubcategory, includeObjectId) {
+function parseLine(line) {
 
-	var tr = document.createElement('tr');
+	var node = {};
 
-	var timeArray = timeRegex.exec(line);
-	var microsecondsArray = microsecondsRegex.exec(line);
-	var categoryArray = categoryRegex.exec(line);
-	var subcategoryArray = subcategoryRegex.exec(line);
-	var objectIdArray = objectIdRegex.exec(line);
+	node.leaf     = false;
+	node.children = [];
 
-	if (includeTime) tr.appendChild(format(timeArray));
-	if (includeMicroseconds) tr.appendChild(format(microsecondsArray));
-	if (includeObjectId) tr.appendChild(format(objectIdArray));
-	if (includeSubcategory) tr.appendChild(format(subcategoryArray));
-	if (includeCategory) tr.appendChild(format(categoryArray));
-
+	node.time         = format(timeRegex.exec(line));
+	node.microseconds = format(microsecondsRegex.exec(line));
+	node.category     = format(categoryRegex.exec(line));
+	node.line         = format(subcategoryRegex.exec(line));
+	node.objectId     = format(objectIdRegex.exec(line));	
+	
 	line = line.replace(timeRegex, '');
 	line = line.replace(microsecondsRegex, '');
 	line = line.replace(categoryRegex, '');
@@ -108,105 +136,242 @@ function indentLine(line, includeTime, includeMicroseconds, includeCategory, inc
 	var isEntry  = false;
 	var isExit   = false;
 
-	if (categoryArray) {
+	if (line.trim().length === 0) {
+		line = node.category;
+	}
+	
+	node.isEntry     = false;
+	node.isExit      = false;
+	node.isException = false;
+	node.isDebug     = false;
 
-		var category = categoryArray[0];
+	if (node.category.length > 0) {
 
-		if (/METHOD_ENTRY|CONSTRUCTOR_ENTRY|DML_BEGIN|SOQL_EXECUTE_BEGIN|CODE_UNIT_STARTED|VF_DESERIALIZE_VIEWSTATE_BEGIN/.test(category)) {
-			isEntry = true;
+		if (/METHOD_ENTRY|CONSTRUCTOR_ENTRY|DML_BEGIN|SOQL_EXECUTE_BEGIN|CODE_UNIT_STARTED|VF_DESERIALIZE_VIEWSTATE_BEGIN/.test(node.category)) {
+			node.isEntry = true;
 		}
-		else if (/METHOD_EXIT|CONSTRUCTOR_EXIT|DML_END|SOQL_EXECUTE_END|CODE_UNIT_FINISHED|VF_DESERIALIZE_VIEWSTATE_END/.test(category)) {
-			isExit = true;
+		else if (/METHOD_EXIT|CONSTRUCTOR_EXIT|DML_END|SOQL_EXECUTE_END|CODE_UNIT_FINISHED|VF_DESERIALIZE_VIEWSTATE_END/.test(node.category)) {
+			node.isExit = true;
 		}
-		else if (/EXCEPTION_THROWN|FATAL_ERROR/.test(category)) {
-			tr.style.backgroundColor = '#fdd';
+		else if (/EXCEPTION_THROWN|FATAL_ERROR/.test(node.category)) {
+			node.isException = true;
 		}
-		else if (/USER_DEBUG/.test(category)) {
-			tr.style.backgroundColor = '#dfd';
+		else if (/USER_DEBUG/.test(node.category)) {
+			node.isDebug = true;
 		}
 	}
 
-	if (isExit) {
+	if (node.isEntry) {
+		indent++;
+		nodeStack[nodeStack.length - 1].children.push(node);
+		nodeStack.push(node);
+	}
+	else if (node.isExit) {	
 		indent--;
+		var offNode = nodeStack.pop();
+		
+		if (offNode.children.length === 0) {
+			offNode.leaf = true;
+		}
+		else {
+			offNode.expanded = true;
+		}
+	}
+	else {
+		node.leaf = true;
+		nodeStack[nodeStack.length - 1].children.push(node);
 	}
 
-	var paddingLeft = indent * 30;
-
+	if (indent < 0) {
+		node.text += " NEGATIVE INDENT ";
+	}
+	
 	if (indent < 0) {
 		line += " NEGATIVE INDENT ";
 	}
 
-	tr.appendChild(formatLog(paddingLeft, cleanUp(line)));
-
-	if (isEntry) {
-		indent++;
-	}
-
-	return tr;
+	node.text = format([line]);
+	node.indent = indent;		
 	
 }
 
-/**
- * Create a TD with the given padding and text content.
- * @param paddingLeft
- * @param text
- * @returns {HTMLElement}
- */
-function formatLog(paddingLeft, text){
-	var td = document.createElement('td');
-	td.style.paddingLeft = paddingLeft + 'px';
-	td.appendChild(document.createTextNode(text));
-	return td;
-}
-
-/**
- * Create a TD for the given REGEX results array.
- * @param resultsArray
- * @returns {HTMLTableCellElement}
- */
 function format(resultsArray) {
-	var td = document.createElement('td');
+
 	if (resultsArray && resultsArray[0]) {
-		var text = cleanUp(resultsArray[0]);
-		td.appendChild(document.createTextNode(text));
+	
+		var text = resultsArray[0];
+		
+		if (text === null || text === undefined) {
+			return '';
+		}
+
+		return Ext.String.htmlEncode(text.replace(/\|/, '').replace(/\|$/, ''));
 	}
 	else {
-		td.innerHTML = '&nbsp;';
-	}
-	return td;
-}
-
-function cleanUp(text) {
-
-	if (text === null || text === undefined) {
 		return '';
 	}
+}
 
-	return text.replace(/\|/, '').replace(/\|$/, '');
+function render() {
+	
+	var table = document.getElementById('output');
+	table.innerHTML = ''; // Clear
+
+	if (extTree) {
+		Ext.destroy(extTree);
+		extTree = undefined;
+	}
+	
+	// Tree rendering via ext-js 
+	if (document.getElementById('renderExtJS').checked) {
+
+		enableFilters(false);
+
+		if (!root.children || root.children.length == 0) {
+			return;
+		}
+		
+		extTree = Ext.create('Ext.tree.Panel', {
+			title: 'Log',
+			width: '100%',
+			height: 'fit',
+			renderTo: Ext.Element.get('log'),
+			collapsible: true,
+			useArrows: true,
+			multiSelect: true,
+			lines: true,
+			singleExpand: false,
+			rootVisible: false,
+			fields: ['text', 'time', 'microseconds', 'objectId', 'line', 'category'],
+			columns: [{
+				xtype: 'treecolumn',
+				text: 'Text',
+				flex: 11,
+				sortable: true,
+				dataIndex: 'text'
+			}, {
+				text: 'Category',
+				flex: 4,
+				sortable: true,
+				dataIndex: 'category',
+			}, {
+				text: 'Line',
+				flex: 1,
+				sortable: true,
+				dataIndex: 'line'
+			}, {
+				text: 'Time',
+				flex: 2,
+				sortable: true,
+				dataIndex: 'time'
+			}, {
+				text: 'Microseconds',
+				flex: 2,
+				sortable: true,
+				dataIndex: 'microseconds'
+			}, {
+				text: 'Object',
+				flex: 2,
+				sortable: true,
+				dataIndex: 'objectId'
+			}],
+			root: root		
+		});	
+
+		return;
+	}
+
+	// Faster plain table rendering
+	else {	
+	
+		enableFilters(true);	
+
+		var includeTime         = document.getElementById('includeTime').checked;
+		var includeMicroseconds = document.getElementById('includeMicroseconds').checked;
+		var includeCategory     = document.getElementById('includeCategory').checked;
+		var includeSubcategory  = document.getElementById('includeSubcategory').checked;
+		var includeObjectId     = document.getElementById('includeObjectId').checked;
+
+		if (!root.children || root.children.length == 0) {
+			return;
+		}
+
+		renderNode(table, root, includeTime, includeMicroseconds, includeCategory, includeSubcategory, includeObjectId);
+		
+	}
+}
+
+function renderNode(table, node, includeTime, includeMicroseconds, includeCategory, includeSubcategory, includeObjectId) {
+
+	var tr = document.createElement('tr');
+	
+	if (includeTime)         createCell(tr, node.time);
+	if (includeMicroseconds) createCell(tr, node.microseconds);
+	if (includeObjectId)     createCell(tr, node.objectId);
+	if (includeSubcategory)  createCell(tr, node.line);
+	if (includeCategory)     createCell(tr, node.category);
+
+	createCell(tr, node.text, node.indent);
+	
+	if(node.isException) {
+		tr.style.backgroundColor = '#fdd';
+	}
+	else if (node.isDebug) {
+		tr.style.backgroundColor = '#dfd';
+	}
+
+	table.appendChild(tr);
+	
+	if (node.children) {
+		
+		for (var i = 0; i < node.children.length; i++) {
+			renderNode(table, node.children[i], includeTime, includeMicroseconds, includeCategory, includeSubcategory, includeObjectId);
+		}
+		
+	}
+}
+
+function createCell(tr, text, indent){
+	
+	var td = document.createElement('td');
+	
+	td.className = 'logCell';
+	td.appendChild(document.createTextNode(text));
+	
+	if (indent) {
+		td.style.paddingLeft = (30 * indent) + 'px';
+	}
+	
+	tr.appendChild(td);	
+}
+
+function clear() {
+	document.getElementById('input').value = '';
+}
+
+function demo() {
+	alert('demo');
+}
+
+function enableFilters(enable) {
+	$("#include > input:checkbox").button({disabled:!enable});
 }
 
 $(function() {
 
-	$("#reformatButton")
-	.button()
-    .click(function( event ) {
-        event.preventDefault();
-    });
-	
-	$("#clearButton")
-	.button()
-    .click(function( event ) {
-        event.preventDefault();
-    });
-	
-	$("#demoButton")
-	.button()
-    .click(function( event ) {
-        event.preventDefault();
-    });
-
     $("#include").buttonset();
-});
+    $("#rendering").buttonset();
+	
+    $("#controls")
+	.dialog({
+		position: { my: "left top", at: "left+10 top+10", of: window },
+		width: 'auto',
+		dialogClass: "noClose" 
+	});
+
+	$("#clearButton").button();	
+	$("#demoButton").button();	
+})
 
 </script>
 
@@ -214,36 +379,40 @@ $(function() {
 
 <body>
 
-<h1>
+<div id='controls' title='sIndent - Salesforce Debug Log Indenter'>
 
-sIndent - Salesforce Debug Log Indenter
+	<textarea id='input' required rows='5' wrap='hard' oninput='parse()'
+	placeholder='Paste your log here... You can paste the full contents of the salesforce debug log screen from your browser or from eclipse - i.e. Ctrl-A Ctrl-C then Paste)'></textarea>
 
-</h1>
+	<div id="toolbar">
 
-<textarea id='input' autofocus required cols='100' rows='5' wrap='hard' oninput='indentLog()'
- placeholder='Paste your log here... (You can paste the full contents of the salesforce debug log screen from your browser or from eclipse - i.e. Ctrl-A Ctrl-C then Paste)'></textarea>
+		<input id='clearButton' autofocus type='button' onclick='clear()' value='Clear'/>
+		<input id='demoButton'            type='button' onclick='demo()'  value='Demo' />
 
-<div id="toolbar">
+		<span id="include" class="asBlock">
 
-	<input id='reformatButton' type='button' value='Indent'/>
-	<input id='clearButton'    type='button' value='Clear'/>
-	<input id='demoButton'     type='button' value='Demo'/>
+			<input id='includeTime'         type='checkbox' onclick='render()' checked /><label for='includeTime'        >time</label>
+			<input id='includeMicroseconds' type='checkbox' onclick='render()'         /><label for='includeMicroseconds'>microseconds</label>
+			<input id='includeObjectId'     type='checkbox' onclick='render()'         /><label for='includeObjectId'    >objectId</label>
+			<input id='includeSubcategory'  type='checkbox' onclick='render()'         /><label for='includeSubcategory' >line/subcat</label>
+			<input id='includeCategory'     type='checkbox' onclick='render()' checked /><label for='includeCategory'    >category</label>
 
-	<span class='ui-widget'>Show:</span>
-    
-	<span id="include">
+		</span>
+   
+		<span id="rendering" class="asBlock">
 
-		<input id='includeTime'         type='checkbox' onclick='indentLog()' checked /><label for='includeTime'        >time</label>
-		<input id='includeMicroseconds' type='checkbox' onclick='indentLog()'         /><label for='includeMicroseconds'>microseconds</label>
-		<input id='includeObjectId'     type='checkbox' onclick='indentLog()'         /><label for='includeObjectId'    >objectId</label>
-		<input id='includeSubcategory'  type='checkbox' onclick='indentLog()'         /><label for='includeSubcategory' >line/subcat</label>
-		<input id='includeCategory'     type='checkbox' onclick='indentLog()' checked /><label for='includeCategory'    >category</label>
+			<input id='renderPlain' type='radio' name='render' onclick='parse();render()' checked /><label for='renderPlain'>Table</label>
+			<input id='renderExtJS' type='radio' name='render' onclick='render()'                 /><label for='renderExtJS'>Tree</label>
 
-	</span>
+		</span>
+
+	</div>
 
 </div>
 
-<table id='output' style='font-family:monospace'></table>
+<div id='log'>
+	<table id='output' style='font-family:monospace'></table>
+</div>
 
 </body>
 
