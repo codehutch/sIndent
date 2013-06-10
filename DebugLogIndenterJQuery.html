@@ -65,6 +65,8 @@ var root = {
 var extTree;
 var nodeStack;
 
+var clearedInput;
+
 var indent = 0;
 
 var timeRegex          = /\d\d:\d\d:\d\d\.\d\d\d/i;
@@ -74,14 +76,29 @@ var subcategoryRegex   = /\|\[\w*\]/i;
 var objectIdRegex      = /\|[A-Z0-9]{15}\|/i;
 
 function parse() {
+
+	showProgress(true, "Parsing");
+	setTimeout(realParse, 50);
 	
-console.log('parse');	
+}
+	
+function realParse() {	
 
 	delete root.children;
 	root.children = [];
 	nodeStack = [root];
 
 	var input = document.getElementById('input').value;
+	
+	if (input == null || input.trim().length == 0) {
+		input = clearedInput;
+		
+		if (input == null || input.trim().length == 0) {
+			showProgress(false);
+			return;
+		}
+	}
+	
 	var lines = input.split('\n');
 	var numOk = 0;
 
@@ -96,7 +113,7 @@ console.log('parse');
 			++numOk;
 		}
 	}
-
+	
 	if (indent !== 0)
 	{
 		alert('Either your log was truncated or something went wrong. (Non-zero indent at end: ' + indent + ')');
@@ -109,6 +126,9 @@ console.log('parse');
 	
 	savedChildren = root.children;
 	render();
+	clear();
+	showProgress(false);
+	
 }
 
 /**
@@ -213,10 +233,17 @@ function format(resultsArray) {
 }
 
 function render() {
+
+	showProgress(true, "Rendering");
+	setTimeout(realRender, 50);
+
+}
+
+function realRender() {
 	
 	var table = document.getElementById('output');
-	table.innerHTML = ''; // Clear
-
+	table.innerHTML = ''; // Remove existing output
+	
 	if (extTree) {
 		Ext.destroy(extTree);
 		extTree = undefined;
@@ -228,6 +255,7 @@ function render() {
 		enableFilters(false);
 
 		if (!root.children || root.children.length == 0) {
+			showProgress(false);		
 			return;
 		}
 		
@@ -277,8 +305,8 @@ function render() {
 			}],
 			root: root		
 		});	
-
-		return;
+		
+		extTree.setHeight(extTree.getHeight() + 150); // Cludge the height
 	}
 
 	// Faster plain table rendering
@@ -293,12 +321,15 @@ function render() {
 		var includeObjectId     = document.getElementById('includeObjectId').checked;
 
 		if (!root.children || root.children.length == 0) {
+			showProgress(false);				
 			return;
 		}
 
 		renderNode(table, root, includeTime, includeMicroseconds, includeCategory, includeSubcategory, includeObjectId);
 		
 	}
+	
+	showProgress(false);			
 }
 
 function renderNode(table, node, includeTime, includeMicroseconds, includeCategory, includeSubcategory, includeObjectId) {
@@ -346,7 +377,9 @@ function createCell(tr, text, indent){
 }
 
 function clear() {
-	alert('clear');
+	if (document.getElementById('input').value.trim().length > 0) {
+		clearedInput = document.getElementById('input').value;
+	}
 	document.getElementById('input').value = '';
 }
 
@@ -360,19 +393,39 @@ function enableFilters(enable) {
 
 $(function() {
 
-    $("#include").buttonset();
     $("#rendering").buttonset();
+    $("#include").buttonset();
 	
-    $("#controls")
-	.dialog({
+	$("#demoButton").button();	
+
+    $("#controls").dialog({
 		position: { my: "left top", at: "left+10 top+10", of: window },
 		width: 'auto',
 		dialogClass: "noClose" 
 	});
 
-	$("#clearButton").button();	
-	$("#demoButton").button();	
+    $("#progressBox").dialog({
+		height: 35,
+		width: 500,
+		modal: true,
+		autoOpen: false,
+		dialogClass: "noClose" 
+    });
+	
 })
+
+function showProgress(show, message) {
+
+	if (show) {
+		$("#progressBox").dialog("option", "title", message);
+		$("#progressBox").dialog("moveToTop");
+		$("#progressBox").dialog("open");
+		$("#progressBox").dialog("option", "position", '{ my: "center", at: "center", of: window }');
+	}
+	else {
+		$("#progressBox").dialog("close");
+	}
+}
 
 </script>
 
@@ -387,8 +440,12 @@ $(function() {
 
 	<div id="toolbar">
 
-		<input id='clearButton' autofocus type='button' onclick='clear()' value='Clear'/>
-		<input id='demoButton'            type='button' onclick='demo()'  value='Demo' />
+		<span id="rendering" class="asBlock">
+
+			<input id='renderPlain' type='radio' name='render' onclick='parse();render()' checked /><label for='renderPlain'>Table</label>
+			<input id='renderExtJS' type='radio' name='render' onclick='render()'                 /><label for='renderExtJS'>Tree</label>
+
+		</span>
 
 		<span id="include" class="asBlock">
 
@@ -399,14 +456,9 @@ $(function() {
 			<input id='includeCategory'     type='checkbox' onclick='render()' checked /><label for='includeCategory'    >category</label>
 
 		</span>
+
+		<input id='demoButton' type='button' onclick='demo()' value='Demo' />
    
-		<span id="rendering" class="asBlock">
-
-			<input id='renderPlain' type='radio' name='render' onclick='parse();render()' checked /><label for='renderPlain'>Table</label>
-			<input id='renderExtJS' type='radio' name='render' onclick='render()'                 /><label for='renderExtJS'>Tree</label>
-
-		</span>
-
 	</div>
 
 </div>
@@ -414,6 +466,8 @@ $(function() {
 <div id='log'>
 	<table id='output' style='font-family:monospace'></table>
 </div>
+
+<div id="progressBox"/>
 
 </body>
 
