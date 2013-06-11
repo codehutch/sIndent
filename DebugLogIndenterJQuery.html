@@ -19,6 +19,9 @@ textarea {
 .logCell {
 	padding: 2px;
 	border: 2px solid #fff;
+}	
+
+.logRow {	
 	background-color: #eee;
 }
 
@@ -28,6 +31,21 @@ textarea {
 
 .asBlock {
 	display: inline-block;
+}
+
+.exception {
+	background-color: #fdd;
+	font-weight: bold;
+}
+
+.debug {
+	background-color: #dfd;
+	font-weight: bold;
+}
+
+.header {
+	background-color: #ddd;
+	font-weight: bold;
 }
 
 #log {
@@ -54,6 +72,7 @@ var root = {
 	expanded:     true,
 	leaf:         false,
 	children:     [],
+	isHeader:     true,
 	text:         'TEXT',
 	time:         'TIME',
 	microseconds: 'MICROSECONDS',
@@ -175,9 +194,11 @@ function parseLine(line) {
 		}
 		else if (/EXCEPTION_THROWN|FATAL_ERROR/.test(node.category)) {
 			node.isException = true;
+			node.icon = 'http://extjs-public.googlecode.com/svn/tags/extjs-4.1.1a/release/resources/themes/images/default/form/exclamation.gif';
 		}
 		else if (/USER_DEBUG/.test(node.category)) {
 			node.isDebug = true;
+			node.icon = 'http://extjs-public.googlecode.com/svn/tags/extjs-4.1.1a/release/resources/themes/images/default/shared/warning.gif';
 		}
 	}
 
@@ -201,17 +222,12 @@ function parseLine(line) {
 		node.leaf = true;
 		nodeStack[nodeStack.length - 1].children.push(node);
 	}
-
-	if (indent < 0) {
-		node.text += " NEGATIVE INDENT ";
-	}
 	
 	if (indent < 0) {
 		line += " NEGATIVE INDENT ";
 	}
 
 	node.text = format([line]);
-	node.indent = indent;		
 	
 }
 
@@ -259,6 +275,8 @@ function realRender() {
 			return;
 		}
 		
+		Ext.suspendLayouts();
+		
 		extTree = Ext.create('Ext.tree.Panel', {
 			title: 'Log',
 			width: '100%',
@@ -303,9 +321,15 @@ function realRender() {
 				sortable: true,
 				dataIndex: 'objectId'
 			}],
+			viewConfig: {
+				getRowClass: function(record, rowIndex, rowParams, store){
+					return record.get("rowCls") ? record.get("rowCls") : "";
+				}
+			},
 			root: root		
 		});	
 		
+		Ext.resumeLayouts(true);
 		extTree.setHeight(extTree.getHeight() + 150); // Cludge the height
 	}
 
@@ -325,14 +349,14 @@ function realRender() {
 			return;
 		}
 
-		renderNode(table, root, includeTime, includeMicroseconds, includeCategory, includeSubcategory, includeObjectId);
+		renderNode(table, root, -1, includeTime, includeMicroseconds, includeCategory, includeSubcategory, includeObjectId);
 		
 	}
 	
 	showProgress(false);			
 }
 
-function renderNode(table, node, includeTime, includeMicroseconds, includeCategory, includeSubcategory, includeObjectId) {
+function renderNode(table, node, depth, includeTime, includeMicroseconds, includeCategory, includeSubcategory, includeObjectId) {
 
 	var tr = document.createElement('tr');
 	
@@ -342,13 +366,21 @@ function renderNode(table, node, includeTime, includeMicroseconds, includeCatego
 	if (includeSubcategory)  createCell(tr, node.line);
 	if (includeCategory)     createCell(tr, node.category);
 
-	createCell(tr, node.text, node.indent);
+	var paddingLeft = 30 * depth;
+	
+	createCell(tr, node.text, paddingLeft);
 	
 	if(node.isException) {
-		tr.style.backgroundColor = '#fdd';
+		tr.className = 'exception';
 	}
 	else if (node.isDebug) {
-		tr.style.backgroundColor = '#dfd';
+		tr.className = 'debug';
+	}
+	else if (node.isHeader) {
+		tr.className = 'header';
+	}
+	else {
+		tr.className = 'logRow';
 	}
 
 	table.appendChild(tr);
@@ -356,35 +388,43 @@ function renderNode(table, node, includeTime, includeMicroseconds, includeCatego
 	if (node.children) {
 		
 		for (var i = 0; i < node.children.length; i++) {
-			renderNode(table, node.children[i], includeTime, includeMicroseconds, includeCategory, includeSubcategory, includeObjectId);
+			renderNode(table, node.children[i], depth + 1, includeTime, includeMicroseconds, includeCategory, includeSubcategory, includeObjectId);
 		}
 		
 	}
 }
 
-function createCell(tr, text, indent){
+function createCell(tr, text, paddingLeft){
 	
 	var td = document.createElement('td');
 	
 	td.className = 'logCell';
-	td.appendChild(document.createTextNode(text));
+	td.appendChild(document.createTextNode(Ext.String.htmlDecode(text)));
 	
-	if (indent) {
-		td.style.paddingLeft = (30 * indent) + 'px';
+	if (paddingLeft && paddingLeft > 0) {
+		td.style.paddingLeft = paddingLeft + 'px';
 	}
 	
 	tr.appendChild(td);	
 }
 
 function clear() {
+
 	if (document.getElementById('input').value.trim().length > 0) {
 		clearedInput = document.getElementById('input').value;
 	}
+	
 	document.getElementById('input').value = '';
+	
 }
 
 function demo() {
-	alert('demo');
+	
+	if (confirm('This will load a short example debug log\n\nIs that ok?')) {
+		document.getElementById('input').value = document.getElementById('demoExample').value;
+		parse();
+	}
+	
 }
 
 function enableFilters(enable) {
@@ -467,7 +507,45 @@ function showProgress(show, message) {
 	<table id='output' style='font-family:monospace'></table>
 </div>
 
-<div id="progressBox"/>
+<div id="progressBox" /></div>
+
+<textarea id='demoExample' style='display:none'>
+27.0 APEX_CODE,DEBUG;APEX_PROFILING,INFO;CALLOUT,INFO;DB,INFO;SYSTEM,DEBUG;VALIDATION,INFO;VISUALFORCE,INFO;WORKFLOW,INFO
+15:07:39.107 (18107771000)|EXECUTION_STARTED
+15:07:39.107 (18107830000)|CODE_UNIT_STARTED|[EXTERNAL]|01pb0000001Cgbr|HutchDemoTest.test
+15:07:39.108 (18108994000)|METHOD_ENTRY|[2]|01pb0000001Cgbr|HutchDemoTest.HutchDemoTest()
+15:07:39.109 (18109005000)|METHOD_EXIT|[2]|HutchDemoTest
+15:07:39.109 (18109132000)|METHOD_ENTRY|[10]|01pb0000001Cgbr|HutchDemoTest.methodA()
+15:07:39.109 (18109213000)|SYSTEM_METHOD_ENTRY|[21]|system.Math.random()
+15:07:39.109 (18109262000)|SYSTEM_METHOD_EXIT|[21]|system.Math.random()
+15:07:39.109 (18109358000)|METHOD_ENTRY|[24]|01pb0000001Cgbr|HutchDemoTest.methodC()
+15:07:39.109 (18109387000)|SYSTEM_METHOD_ENTRY|[35]|system.Math.random()
+15:07:39.109 (18109406000)|SYSTEM_METHOD_EXIT|[35]|system.Math.random()
+15:07:39.109 (18109430000)|METHOD_EXIT|[24]|01pb0000001Cgbr|HutchDemoTest.methodC()
+15:07:39.109 (18109436000)|METHOD_EXIT|[10]|01pb0000001Cgbr|HutchDemoTest.methodA()
+15:07:39.109 (18109447000)|METHOD_ENTRY|[11]|01pb0000001Cgbr|HutchDemoTest.methodB()
+15:07:39.109 (18109471000)|SYSTEM_METHOD_ENTRY|[28]|system.Math.random()
+15:07:39.109 (18109489000)|SYSTEM_METHOD_EXIT|[28]|system.Math.random()
+15:07:39.109 (18109519000)|METHOD_ENTRY|[31]|01pb0000001Cgbr|HutchDemoTest.methodD()
+15:07:39.109 (18109554000)|SYSTEM_METHOD_ENTRY|[41]|System.debug(ANY)
+15:07:39.109 (18109571000)|USER_DEBUG|[41]|DEBUG|In method D
+15:07:39.109 (18109578000)|SYSTEM_METHOD_EXIT|[41]|System.debug(ANY)
+15:07:39.109 (18109588000)|METHOD_ENTRY|[42]|01pb0000001Cgbr|HutchDemoTest.methodE()
+15:07:39.110 (18110473000)|CONSTRUCTOR_ENTRY|[46]|01pb0000001Cgbr|<init>()
+15:07:39.110 (18110698000)|CONSTRUCTOR_EXIT|[46]|01pb0000001Cgbr|<init>()
+15:07:39.110 (18110747000)|EXCEPTION_THROWN|[46]|HutchDemoTest.DemoException: Script-thrown exception
+15:07:39.110 (18110760000)|METHOD_EXIT|[42]|01pb0000001Cgbr|HutchDemoTest.methodE()
+15:07:39.110 (18110766000)|METHOD_EXIT|[31]|01pb0000001Cgbr|HutchDemoTest.methodD()
+15:07:39.110 (18110771000)|METHOD_EXIT|[11]|01pb0000001Cgbr|HutchDemoTest.methodB()
+15:07:39.110 (18110823000)|SYSTEM_METHOD_ENTRY|[16]|System.debug(ANY)
+15:07:39.110 (18110841000)|USER_DEBUG|[16]|DEBUG|Caught Exception
+15:07:39.110 (18110847000)|SYSTEM_METHOD_EXIT|[16]|System.debug(ANY)
+15:07:21.264 (18110868000)|CUMULATIVE_LIMIT_USAGE
+15:07:21.264|LIMIT_USAGE_FOR_NS|(default)|
+15:07:21.264|CUMULATIVE_LIMIT_USAGE_END
+15:07:39.110 (18110898000)|CODE_UNIT_FINISHED|HutchDemoTest.test
+15:07:39.110 (18110905000)|EXECUTION_FINISHED
+</textarea>
 
 </body>
 
