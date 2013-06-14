@@ -84,7 +84,7 @@ var root = {
 var extTree;
 var nodeStack;
 
-var clearedInput;
+var clearedInput = '';
 
 var indent = 0;
 
@@ -93,6 +93,19 @@ var microsecondsRegex  = /\(\d\d*\)/i;
 var categoryRegex      = /\|[^|]*/i;
 var subcategoryRegex   = /\|\[\w*\]/i;
 var objectIdRegex      = /\|[A-Z0-9]{15}\|/i;
+
+var warned = false;
+
+function handleInput() {
+	
+	var input = document.getElementById('input').value;
+
+	if (input == null || input.trim().length == 0) {
+		return;
+	}	
+	
+	parse();
+}
 
 function parse() {
 
@@ -110,6 +123,7 @@ function realParse() {
 	var input = document.getElementById('input').value;
 	
 	if (input == null || input.trim().length == 0) {
+		
 		input = clearedInput;
 		
 		if (input == null || input.trim().length == 0) {
@@ -147,7 +161,6 @@ function realParse() {
 	render();
 	clear();
 	showProgress(false);
-	
 }
 
 /**
@@ -183,7 +196,7 @@ function parseLine(line) {
 	node.isExit      = false;
 	node.isException = false;
 	node.isDebug     = false;
-
+	
 	if (node.category.length > 0) {
 
 		if (/METHOD_ENTRY|CONSTRUCTOR_ENTRY|DML_BEGIN|SOQL_EXECUTE_BEGIN|CODE_UNIT_STARTED|VF_DESERIALIZE_VIEWSTATE_BEGIN/.test(node.category)) {
@@ -360,6 +373,9 @@ function renderNode(table, node, depth, includeTime, includeMicroseconds, includ
 
 	var tr = document.createElement('tr');
 	
+	node.tr = tr;
+	tr['node'] = node;
+	
 	if (includeTime)         createCell(tr, node.time);
 	if (includeMicroseconds) createCell(tr, node.microseconds);
 	if (includeObjectId)     createCell(tr, node.objectId);
@@ -368,7 +384,7 @@ function renderNode(table, node, depth, includeTime, includeMicroseconds, includ
 
 	var paddingLeft = 30 * depth;
 	
-	createCell(tr, node.text, paddingLeft);
+	createCell(tr, node.text, paddingLeft, node.isEntry && !node.leaf);
 	
 	if(node.isException) {
 		tr.className = 'exception';
@@ -394,11 +410,19 @@ function renderNode(table, node, depth, includeTime, includeMicroseconds, includ
 	}
 }
 
-function createCell(tr, text, paddingLeft){
+function createCell(tr, text, paddingLeft, createToggle){
 	
 	var td = document.createElement('td');
 	
 	td.className = 'logCell';
+	
+	if (createToggle) {
+		var img = document.createElement('img');
+		img.src = 'collapse.png';
+		img.onclick = handleToggle;
+		td.appendChild(img);	
+	}
+	
 	td.appendChild(document.createTextNode(Ext.String.htmlDecode(text)));
 	
 	if (paddingLeft && paddingLeft > 0) {
@@ -406,6 +430,48 @@ function createCell(tr, text, paddingLeft){
 	}
 	
 	tr.appendChild(td);	
+}
+
+function handleToggle(e) {
+
+	var event = e ? e : window.event;
+	var target = event.target ? event.target : event.srcElement;
+	var row = target.parentElement.parentElement;
+	var node = row['node'];
+
+	var isExpand = !node.expanded;	
+	node.expanded = isExpand;
+	
+	node.tr.src = isExpand ? 'expand.png' : 'collapse.png';
+	node.tr.style.backgroundColor = isExpand ? '#eee' : '#fdf';
+	
+	toggle(node, isExpand);
+	
+}
+
+function toggle(node, isExpand) {
+
+	for (var i = 0; node.children && i < node.children.length; i++) {
+
+		var child = node.children[i];
+		
+		if (!isExpand) {
+			child.tr.style.display = 'none';
+			toggle(child, isExpand);
+		}
+
+		else {
+
+			child.tr.style.display = '';
+		
+			if (child.expanded) {
+				toggle(child, isExpand);			
+			}
+					
+		}
+
+	}
+	
 }
 
 function clear() {
@@ -425,6 +491,14 @@ function demo() {
 		parse();
 	}
 	
+}
+
+function warn() {
+
+	if (!warned) {
+		alert("Fancy mode can be very slow when the log contains many lines");
+		warned = true;
+	}
 }
 
 function enableFilters(enable) {
@@ -475,15 +549,15 @@ function showProgress(show, message) {
 
 <div id='controls' title='sIndent - Salesforce Debug Log Indenter'>
 
-	<textarea id='input' required rows='5' wrap='hard' oninput='parse()'
+	<textarea id='input' required rows='5' wrap='hard' oninput='handleInput()'
 	placeholder='Paste your log here... You can paste the full contents of the salesforce debug log screen from your browser or from eclipse - i.e. Ctrl-A Ctrl-C then Paste)'></textarea>
 
 	<div id="toolbar">
 
 		<span id="rendering" class="asBlock">
 
-			<input id='renderPlain' type='radio' name='render' onclick='parse();render()' checked /><label for='renderPlain'>Table</label>
-			<input id='renderExtJS' type='radio' name='render' onclick='render()'                 /><label for='renderExtJS'>Tree</label>
+			<input id='renderPlain' type='radio' name='render' onclick='parse();render()' checked /><label for='renderPlain'>Plain</label>
+			<input id='renderExtJS' type='radio' name='render' onclick='warn();render()'          /><label for='renderExtJS'>Fancy</label>
 
 		</span>
 
@@ -507,7 +581,7 @@ function showProgress(show, message) {
 	<table id='output' style='font-family:monospace'></table>
 </div>
 
-<div id="progressBox" /></div>
+<div id="progressBox"></div>
 
 <textarea id='demoExample' style='display:none'>
 27.0 APEX_CODE,DEBUG;APEX_PROFILING,INFO;CALLOUT,INFO;DB,INFO;SYSTEM,DEBUG;VALIDATION,INFO;VISUALFORCE,INFO;WORKFLOW,INFO
