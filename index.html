@@ -7,7 +7,7 @@
 <title> sIndent - Salesforce Debug Log Indenter </title>
 
 <link rel="stylesheet" type="text/css" media="all" href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/themes/cupertino/jquery-ui.css"/>
-<link rel="stylesheet" type="text/css" media="all" href="http://extjs-public.googlecode.com/svn/tags/extjs-4.1.1a/release/resources/css/ext-all.css">
+<link rel="stylesheet" type="text/css" media="all" href="http://cdn.sencha.com/ext/gpl/4.1.1/resources/css/ext-all.css">
 
 <style>
 
@@ -58,7 +58,7 @@ textarea {
   
 <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.1/jquery.min.js"></script>
 <script src="http://ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/jquery-ui.min.js"></script>
-<script src="http://extjs-public.googlecode.com/svn/tags/extjs-4.1.1a/release/ext-all.js"></script>
+<script src="http://cdn.sencha.com/ext/gpl/4.1.1/ext-all.js"></script>
 
 <script type='text/javascript'>
 
@@ -233,7 +233,10 @@ function parseLine(line) {
 	}
 	else {
 		node.leaf = true;
-		nodeStack[nodeStack.length - 1].children.push(node);
+		var nodeFromNodeStack = nodeStack[nodeStack.length - 1];
+		if(nodeFromNodeStack!=null) {
+			nodeFromNodeStack.children.push(node);
+		}
 	}
 	
 	if (indent < 0) {
